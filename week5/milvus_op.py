@@ -58,3 +58,28 @@ def get_collection_fields():
     collection_info = client.describe_collection(collection_name=collection_name)
     field_names = [field["name"] for field in collection_info["fields"]]
     return field_names
+
+
+def select_by_vector(vector: list, limit: int = 3):
+    if not isinstance(vector, list) or len(vector) == 0:
+        raise TypeError("参数错误！必须传入非空向量列表")
+
+    res = client.search(
+        collection_name=collection_name,
+        anns_field="vector",        # 【固定】你集合里存储向量的字段名
+        data=[vector],              # 【必须二维列表】格式：[待检索向量]
+        limit=limit,                # 返回几条最相似的数据
+        search_params={"metric_type": "L2"},  # 相似度计算方式：IP内积
+        output_fields=["text"]         # 【关键】返回所有字段（text/doc_type/vector）
+    )
+
+    final_result = []
+    for hit in res[0]:  # res[0] 是当前查询的结果集
+        final_result.append({
+            # "pk": hit["id"],  # 主键ID
+            # "similarity": hit["distance"],  # 相似度分数（越高越相似）
+            "text": hit["entity"]["text"],  # 文本内容
+            # "doc_type": hit["entity"]["doc_type"]  # 文档类型
+        })
+
+    return final_result
