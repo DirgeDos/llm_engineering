@@ -133,9 +133,9 @@ def run_answer_evaluation(progress=gr.Progress()):
 
     for test, result, prog_value in evaluate_all_answers():
         count += 1
-        total_accuracy += result.accuracy
-        total_completeness += result.completeness
-        total_relevance += result.relevance
+        total_accuracy += result.accuracy.score
+        total_completeness += result.completeness.score
+        total_relevance += result.relevance.score
 
         category_accuracy[test.category].append(result.accuracy)
 

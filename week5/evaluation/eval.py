@@ -1,17 +1,44 @@
+import os
 import sys
 import math
 from pydantic import BaseModel, Field
 from litellm import completion
 from dotenv import load_dotenv
 
-from evaluation.test import TestQuestion, load_tests
-from implementation.answer import answer_question, fetch_context
-
+from week5.evaluation import test
+from week5.evaluation.test import TestQuestion, load_tests
+from week5.implementation.answer import answer_question, fetch_context
 
 load_dotenv(override=True)
 
+api_key = os.getenv('EMBEDDING_API_KEY')
+self_model = "dashscope/qwen3.5-plus-2026-02-15"
+milvus_db_name = "default"
+milvus_collection_name = "vector_db"
+
 MODEL = "gpt-4.1-nano"
 db_name = "vector_db"
+
+j_message = """
+你是专业的AI回答评估专家，**必须严格返回合法JSON，不能有任何多余内容、markdown、解释**。
+你需要从3个维度评估生成的回答，每个维度给出1-5分的评分和详细反馈，最后给出整体总结。
+**必须返回JSON格式**，结构如下：
+{
+  "accuracy": {"score": 数字(1-5), "feedback": "准确性的详细反馈"},
+  "completeness": {"score": 数字(1-5), "feedback": "完整性的详细反馈"},
+  "relevance": {"score": 数字(1-5), "feedback": "相关性的详细反馈"},
+  "overall_feedback": "整体评估总结"
+}
+评分规则：
+- 准确性：与参考答案完全一致才给5分，错误则必须给1分
+- 完整性：覆盖问题所有方面和参考答案所有信息才给5分
+- 相关性：无多余信息、完全贴合问题才给5分
+"""
+
+
+class ScoreFeedback(BaseModel):
+    score: float = Field(ge=1, le=5, description="1-5分的评分，1最差，5最优")
+    feedback: str = Field(description="该维度的详细评估反馈")
 
 
 class RetrievalEval(BaseModel):
@@ -27,25 +54,17 @@ class RetrievalEval(BaseModel):
 class AnswerEval(BaseModel):
     """LLM-as-a-judge evaluation of answer quality."""
 
-    feedback: str = Field(
-        description="Concise feedback on the answer quality, comparing it to the reference answer and evaluating based on the retrieved context"
-    )
-    accuracy: float = Field(
-        description="How factually correct is the answer compared to the reference answer? 1 (wrong. any wrong answer must score 1) to 5 (ideal - perfectly accurate). An acceptable answer would score 3."
-    )
-    completeness: float = Field(
-        description="How complete is the answer in addressing all aspects of the question? 1 (very poor - missing key information) to 5 (ideal - all the information from the reference answer is provided completely). Only answer 5 if ALL information from the reference answer is included."
-    )
-    relevance: float = Field(
-        description="How relevant is the answer to the specific question asked? 1 (very poor - off-topic) to 5 (ideal - directly addresses question and gives no additional information). Only answer 5 if the answer is completely relevant to the question and gives no additional information."
-    )
+    accuracy: ScoreFeedback = Field(description="准确性评估：与参考答案的事实一致性")
+    completeness: ScoreFeedback = Field(description="完整性评估：是否覆盖问题所有要点")
+    relevance: ScoreFeedback = Field(description="相关性评估：是否直接回答问题，无冗余")
+    overall_feedback: str = Field(description="整体评估总结")
 
 
 def calculate_mrr(keyword: str, retrieved_docs: list) -> float:
     """Calculate reciprocal rank for a single keyword (case-insensitive)."""
     keyword_lower = keyword.lower()
     for rank, doc in enumerate(retrieved_docs, start=1):
-        if keyword_lower in doc.page_content.lower():
+        if keyword_lower in doc["text"].lower():
             return 1.0 / rank
     return 0.0
 
@@ -64,7 +83,7 @@ def calculate_ndcg(keyword: str, retrieved_docs: list, k: int = 10) -> float:
 
     # Binary relevance: 1 if keyword found, 0 otherwise
     relevances = [
-        1 if keyword_lower in doc.page_content.lower() else 0 for doc in retrieved_docs[:k]
+        1 if keyword_lower in  doc["text"].lower() else 0 for doc in retrieved_docs[:k]
     ]
 
     # DCG
@@ -148,14 +167,27 @@ Please evaluate the generated answer on three dimensions:
 2. Completeness: How thoroughly does it address all aspects of the question, covering all the information from the reference answer?
 3. Relevance: How well does it directly answer the specific question asked, giving no additional information?
 
-Provide detailed feedback and scores from 1 (very poor) to 5 (ideal) for each dimension. If the answer is wrong, then the accuracy score must be 1.""",
+Provide detailed feedback and scores from 1 (very poor) to 5 (ideal) for each dimension. If the answer is wrong, then the accuracy score must be 1.
+IMPORTANT: Output ONLY valid JSON, no extra explanation, no markdown, follow the JSON schema strictly.
+
+""",
         },
     ]
 
     # Call LLM judge with structured outputs (async)
-    judge_response = completion(model=MODEL, messages=judge_messages, response_format=AnswerEval)
+    response_schema = AnswerEval.model_json_schema()
 
-    answer_eval = AnswerEval.model_validate_json(judge_response.choices[0].message.content)
+    judge_response = completion(
+        model=self_model,
+        messages=judge_messages,
+        response_format={"type": "json_object", "schema": response_schema},
+        api_key=api_key,
+        temperature=0.0,  # 0温度锁死格式，杜绝幻觉漏字段
+        max_tokens=2048  # 给足够token，避免JSON截断
+    )
+    raw_content = judge_response.choices[0].message.content
+    print("🔍 LLM 原始返回JSON：", raw_content)
+    answer_eval = AnswerEval.model_validate_json(raw_content)
 
     return answer_eval, generated_answer, retrieved_docs
 
@@ -245,4 +277,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    tests = test.load_tests()
+    example = tests[0]
+    # eval, answer, chunks = evaluate_answer(example)
+    evaluate_retrieval(example)
+
+

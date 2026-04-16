@@ -1,5 +1,17 @@
+import asyncio
+import sys
+
 import gradio as gr
 from dotenv import load_dotenv
+
+from implementation.answer import answer_question
+
+# 修复1：解决Milvus异步事件循环报错（Windows系统必备）
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+# 创建全局事件循环
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 from implementation.answer import answer_question
 
@@ -28,13 +40,13 @@ def main():
 
     theme = gr.themes.Soft(font=["Inter", "system-ui", "sans-serif"])
 
-    with gr.Blocks(title="Insurellm Expert Assistant", theme=theme) as ui:
+    with gr.Blocks(title="Insurellm Expert Assistant") as ui:
         gr.Markdown("# 🏢 Insurellm Expert Assistant\nAsk me anything about Insurellm!")
 
         with gr.Row():
             with gr.Column(scale=1):
                 chatbot = gr.Chatbot(
-                    label="💬 Conversation", height=600, type="messages", show_copy_button=True
+                    label="💬 Conversation", height=600
                 )
                 message = gr.Textbox(
                     label="Your Question",
@@ -54,7 +66,7 @@ def main():
             put_message_in_chatbot, inputs=[message, chatbot], outputs=[message, chatbot]
         ).then(chat, inputs=chatbot, outputs=[chatbot, context_markdown])
 
-    ui.launch(inbrowser=True)
+    ui.launch(inbrowser=True, theme=theme)
 
 
 if __name__ == "__main__":

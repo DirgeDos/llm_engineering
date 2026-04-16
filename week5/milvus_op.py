@@ -66,11 +66,11 @@ def select_by_vector(vector: list, limit: int = 3):
 
     res = client.search(
         collection_name=collection_name,
-        anns_field="vector",        # 【固定】你集合里存储向量的字段名
-        data=[vector],              # 【必须二维列表】格式：[待检索向量]
-        limit=limit,                # 返回几条最相似的数据
+        anns_field="vector",  # 【固定】你集合里存储向量的字段名
+        data=[vector],  # 【必须二维列表】格式：[待检索向量]
+        limit=limit,  # 返回几条最相似的数据
         search_params={"metric_type": "L2"},  # 相似度计算方式：IP内积
-        output_fields=["text"]         # 【关键】返回所有字段（text/doc_type/vector）
+        output_fields=["text", "doc_type", "source"]  # 【关键】返回所有字段（text/doc_type/vector）
     )
 
     final_result = []
@@ -79,7 +79,8 @@ def select_by_vector(vector: list, limit: int = 3):
             # "pk": hit["id"],  # 主键ID
             # "similarity": hit["distance"],  # 相似度分数（越高越相似）
             "text": hit["entity"]["text"],  # 文本内容
-            # "doc_type": hit["entity"]["doc_type"]  # 文档类型
+            "doc_type": hit["entity"]["doc_type"],  # 文档类型
+            "source": hit["entity"]["source"]
         })
 
     return final_result
