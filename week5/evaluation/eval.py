@@ -83,7 +83,7 @@ def calculate_ndcg(keyword: str, retrieved_docs: list, k: int = 10) -> float:
 
     # Binary relevance: 1 if keyword found, 0 otherwise
     relevances = [
-        1 if keyword_lower in  doc["text"].lower() else 0 for doc in retrieved_docs[:k]
+        1 if keyword_lower in doc["text"].lower() else 0 for doc in retrieved_docs[:k]
     ]
 
     # DCG
@@ -170,6 +170,12 @@ Please evaluate the generated answer on three dimensions:
 Provide detailed feedback and scores from 1 (very poor) to 5 (ideal) for each dimension. If the answer is wrong, then the accuracy score must be 1.
 IMPORTANT: Output ONLY valid JSON, no extra explanation, no markdown, follow the JSON schema strictly.
 
+{{
+  "accuracy": int,
+  "completeness": int,
+  "relevance": int,
+  "overall_feedback": str
+}}
 """,
         },
     ]
@@ -183,8 +189,11 @@ IMPORTANT: Output ONLY valid JSON, no extra explanation, no markdown, follow the
         response_format={"type": "json_object", "schema": response_schema},
         api_key=api_key,
         temperature=0.0,  # 0温度锁死格式，杜绝幻觉漏字段
-        max_tokens=2048  # 给足够token，避免JSON截断
+        max_tokens=2048,  # 给足够token，避免JSON截断
+        extra_body={"enable_thinking": False},
+
     )
+
     raw_content = judge_response.choices[0].message.content
     print("🔍 LLM 原始返回JSON：", raw_content)
     answer_eval = AnswerEval.model_validate_json(raw_content)
@@ -281,5 +290,3 @@ if __name__ == "__main__":
     example = tests[0]
     # eval, answer, chunks = evaluate_answer(example)
     evaluate_retrieval(example)
-
-

@@ -29,8 +29,7 @@ def text_embedding(text):
         model="text-embedding-v4",
         input=text,
         api_key=embedding_api_key,
-        dimensions=2048,
-        text_type="document" #query 和 document
+        dimension=2048,
     )
     if resp.status_code != 200:
         raise Exception(f"向量生成失败：{resp.message}")

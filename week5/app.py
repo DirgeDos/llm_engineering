@@ -21,13 +21,13 @@ load_dotenv(override=True)
 def format_context(context):
     result = "<h2 style='color: #ff7800;'>Relevant Context</h2>\n\n"
     for doc in context:
-        result += f"<span style='color: #ff7800;'>Source: {doc.metadata['source']}</span>\n\n"
-        result += doc.page_content + "\n\n"
+        result += f"<span style='color: #ff7800;'>Source: {doc['source']}</span>\n\n"
+        result += doc["text"] + "\n\n"
     return result
 
 
 def chat(history):
-    last_message = history[-1]["content"]
+    last_message = history[-1]["content"][0]["text"]
     prior = history[:-1]
     answer, context = answer_question(last_message, prior)
     history.append({"role": "assistant", "content": answer})

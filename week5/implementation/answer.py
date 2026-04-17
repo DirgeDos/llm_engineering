@@ -12,7 +12,8 @@ from langchain_core.documents import Document
 from dotenv import load_dotenv
 
 from week5.embedding import text_embedding
-from week5.milvus_op import select_by_vector
+from week5.gen_sparse_vector import text_to_sparse_vector_english
+from week5.milvus_op import select_by_vector, hybrid_search
 
 load_dotenv(override=True)
 
@@ -34,7 +35,6 @@ Context:
 {context}
 """
 
-
 # vectorstore = Chroma(persist_directory=DB_NAME, embedding_function=embedding)
 # retriever = milvus_vector_store.as_retriever()
 
@@ -51,9 +51,10 @@ def fetch_context(question: str) -> list[Document]:
     """
     Retrieve relevant context documents for a question.
     """
-    question_embedding = text_embedding(question)
+    dense_vector = text_embedding(question)
+    sparse_vector = text_to_sparse_vector_english(question)
 
-    return select_by_vector(question_embedding,10)
+    return hybrid_search(dense_vector, sparse_vector, 10)
 
 
 def combined_question(question: str, history: list[dict] = []) -> str:
@@ -70,7 +71,7 @@ def answer_question(question: str, history: list[dict] = []) -> tuple[str, list[
     """
     combined = combined_question(question, history)
     docs = fetch_context(combined)
-    context = "\n\n".join(doc.page_content for doc in docs)
+    context = "\n\n".join(doc["text"] for doc in docs)
     system_prompt = SYSTEM_PROMPT.format(context=context)
     messages = [SystemMessage(content=system_prompt)]
     messages.extend(convert_to_messages(history))
